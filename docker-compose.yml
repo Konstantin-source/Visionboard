@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  # Frontend - Nginx serving static files
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: visionboard-frontend
+    ports:
+      - "8888:80"
+    depends_on:
+      - backend
+    networks:
+      - visionboard-net
+    restart: unless-stopped
+
+  # Backend - Node.js with SQLite
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: visionboard-backend
+    ports:
+      - "3001:3001"
+    volumes:
+      - visionboard-data:/data
+    environment:
+      - PORT=3001
+      - DATA_DIR=/data
+      - VISIONBOARD_PASSWORD=${VISIONBOARD_PASSWORD:-MeinGeheimesPasswort123}
+    networks:
+      - visionboard-net
+    restart: unless-stopped
+
+  # Cloudflare Tunnel
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared-visionboard
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    networks:
+      - visionboard-net
+    depends_on:
+      - frontend
+
+networks:
+  visionboard-net:
+    driver: bridge
+
+volumes:
+  visionboard-data:
+    driver: local

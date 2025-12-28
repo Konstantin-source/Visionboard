@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Visionboard</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Background -->
+    <div class="bg-gradient"></div>
+
+    <!-- Login Screen -->
+    <div class="login-screen" id="loginScreen">
+        <div class="login-box">
+            <h1 class="login-title">🎯 Visionboard</h1>
+            <p class="login-subtitle">Bitte Passwort eingeben</p>
+            <form id="loginForm">
+                <input type="password" id="loginPassword" class="login-input" placeholder="Passwort" autocomplete="current-password" autofocus>
+                <button type="submit" class="login-btn">Anmelden</button>
+            </form>
+            <p class="login-error hidden" id="loginError">Falsches Passwort</p>
+        </div>
+    </div>
+
+    <!-- App Container (hidden until logged in) -->
+    <div class="app-container hidden" id="appContainer">
+        <!-- Minimal Header -->
+        <header class="header">
+        <nav class="tab-navigation">
+            <button class="tab-btn active" data-tab="board">
+                <span class="tab-icon">◇</span>
+                <span class="tab-label">Board</span>
+            </button>
+            <button class="tab-btn" data-tab="todos">
+                <span class="tab-icon">☐</span>
+                <span class="tab-label">Todos</span>
+            </button>
+        </nav>
+        <div class="header-actions">
+            <span class="sync-status" id="syncStatus" title="Synchronisation">●</span>
+            <button class="btn-icon" id="resetView" title="Ansicht zurücksetzen (R)">
+                <span>⟲</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Shortcuts Hint -->
+    <div class="shortcuts-hint" id="shortcutsHint">
+        <span><kbd>WASD</kbd> Navigation</span>
+        <span><kbd>T</kbd> Text</span>
+        <span><kbd>B</kbd> Bild</span>
+        <span><kbd>Space</kbd> + Ziehen = Bewegen</span>
+        <span><kbd>Scroll</kbd> = Zoom</span>
+        <button class="close-hint" id="closeHint">×</button>
+    </div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Board Tab -->
+        <section class="tab-content active" id="board-tab">
+            <!-- Canvas Viewport - this is the visible window -->
+            <div class="canvas-viewport" id="canvasViewport">
+                <!-- Canvas - this is the large pannable area -->
+                <div class="canvas" id="visionCanvas">
+                    <!-- Items will be placed here -->
+                </div>
+            </div>
+            
+            <!-- Mini Map -->
+            <div class="minimap" id="minimap">
+                <div class="minimap-viewport" id="minimapViewport"></div>
+            </div>
+            
+            <!-- Zoom Controls -->
+            <div class="zoom-controls">
+                <button class="zoom-btn" id="zoomOut">−</button>
+                <span class="zoom-level" id="zoomLevel">100%</span>
+                <button class="zoom-btn" id="zoomIn">+</button>
+            </div>
+
+            <!-- Mobile Virtual Joystick -->
+            <div class="mobile-joystick" id="mobileJoystick">
+                <div class="joystick-base">
+                    <div class="joystick-stick" id="joystickStick"></div>
+                </div>
+            </div>
+
+            <!-- Mobile Floating Action Buttons -->
+            <div class="mobile-fab-container" id="mobileFabContainer">
+                <button class="mobile-fab mobile-fab-main" id="mobileFabMain">
+                    <span class="fab-icon">+</span>
+                </button>
+                <div class="mobile-fab-menu" id="mobileFabMenu">
+                    <button class="mobile-fab mobile-fab-action" id="mobileFabText" title="Text einfügen">
+                        <span>T</span>
+                    </button>
+                    <button class="mobile-fab mobile-fab-action" id="mobileFabImage" title="Bild einfügen">
+                        <span>🖼</span>
+                    </button>
+                    <button class="mobile-fab mobile-fab-action" id="mobileFabCenter" title="Zentrieren">
+                        <span>⟲</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Todos Tab -->
+        <section class="tab-content" id="todos-tab">
+            <div class="todos-container">
+                <div class="todos-header">
+                    <h2 class="todos-title">Ziele</h2>
+                    <button class="btn-add-todo" id="addTodo">+ Neues Ziel</button>
+                </div>
+                
+                <div class="todos-categories">
+                    <div class="todo-category" data-category="active">
+                        <div class="category-header">
+                            <span class="category-title">Aktiv</span>
+                            <span class="category-count" id="activeCount">0</span>
+                        </div>
+                        <div class="todo-list" id="activeTodos"></div>
+                    </div>
+                    
+                    <div class="todo-category" data-category="completed">
+                        <div class="category-header">
+                            <span class="category-title">Erledigt</span>
+                            <span class="category-count" id="completedCount">0</span>
+                        </div>
+                        <div class="todo-list" id="completedTodos"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Context Menu (appears on click on canvas) -->
+    <div class="context-menu" id="contextMenu">
+        <button class="context-btn" data-action="text">
+            <span class="context-icon">T</span>
+            <span>Text einfügen</span>
+        </button>
+        <button class="context-btn" data-action="image">
+            <span class="context-icon">🖼</span>
+            <span>Bild einfügen</span>
+        </button>
+        <button class="context-btn" data-action="paste">
+            <span class="context-icon">📋</span>
+            <span>Aus Zwischenablage</span>
+        </button>
+    </div>
+
+    <!-- Text Editor Modal -->
+    <div class="modal" id="textEditorModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="textEditorTitle">Text hinzufügen</h3>
+                <button class="modal-close" id="closeTextEditor">×</button>
+            </div>
+            <div class="modal-body">
+                <textarea id="textInput" placeholder="Dein Text..." autofocus></textarea>
+                <div class="text-options">
+                    <div class="option-row">
+                        <label>Größe</label>
+                        <input type="range" id="fontSize" min="14" max="96" value="24">
+                        <span id="fontSizeValue">24px</span>
+                    </div>
+                    <div class="option-row">
+                        <label>Farbe</label>
+                        <div class="color-picker">
+                            <button class="color-btn active" data-color="#ffffff" style="background: #ffffff"></button>
+                            <button class="color-btn" data-color="#00f5ff" style="background: #00f5ff"></button>
+                            <button class="color-btn" data-color="#ff00ff" style="background: #ff00ff"></button>
+                            <button class="color-btn" data-color="#ffff00" style="background: #ffff00"></button>
+                            <button class="color-btn" data-color="#00ff88" style="background: #00ff88"></button>
+                            <button class="color-btn" data-color="#ff6b35" style="background: #ff6b35"></button>
+                        </div>
+                    </div>
+                    <div class="option-row">
+                        <label>Stil</label>
+                        <div class="style-buttons">
+                            <button class="style-btn" data-style="bold" title="Fett">B</button>
+                            <button class="style-btn" data-style="italic" title="Kursiv">I</button>
+                            <button class="style-btn" data-style="glow" title="Leuchten">✦</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="cancelText">Abbrechen</button>
+                <button class="btn-primary" id="saveText">Speichern</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Todo Editor Modal -->
+    <div class="modal" id="todoEditorModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Neues Ziel</h3>
+                <button class="modal-close" id="closeTodoEditor">×</button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="todoTitle" placeholder="Was möchtest du erreichen?" class="todo-input" autofocus>
+                <div class="option-row">
+                    <label>Priorität</label>
+                    <div class="priority-picker">
+                        <button class="priority-btn" data-priority="low">Niedrig</button>
+                        <button class="priority-btn active" data-priority="medium">Mittel</button>
+                        <button class="priority-btn" data-priority="high">Hoch</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="cancelTodo">Abbrechen</button>
+                <button class="btn-primary" id="saveTodo">Hinzufügen</button>
+            </div>
+        </div>
+    </div>
+
+    </div> <!-- End of app-container -->
+
+    <!-- Hidden File Input -->
+    <input type="file" id="imageInput" accept="image/*" multiple hidden>
+
+    <!-- Notification -->
+    <div class="notification" id="notification"></div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
