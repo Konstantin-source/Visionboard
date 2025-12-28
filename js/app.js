@@ -283,8 +283,243 @@ class VisionboardApp {
         });
         this.viewport.addEventListener('drop', (e) => this.onDrop(e));
         
+        // Mobile Joystick
+        this.initMobileJoystick();
+        
+        // Mobile FABs
+        this.initMobileFABs();
+        
         // Save before leaving
         window.addEventListener('beforeunload', () => this.syncToServer());
+    }
+    
+    // ========================================
+    // Mobile Joystick
+    // ========================================
+    
+    initMobileJoystick() {
+        const joystick = document.getElementById('mobileJoystick');
+        const stick = document.getElementById('joystickStick');
+        
+        if (!joystick || !stick) return;
+        
+        this.joystickState = {
+            active: false,
+            startX: 0,
+            startY: 0,
+            currentX: 0,
+            currentY: 0,
+            maxDistance: 35 // Maximum distance the stick can move from center
+        };
+        
+        // Touch events for joystick
+        stick.addEventListener('touchstart', (e) => this.onJoystickStart(e), { passive: false });
+        document.addEventListener('touchmove', (e) => this.onJoystickMove(e), { passive: false });
+        document.addEventListener('touchend', (e) => this.onJoystickEnd(e));
+        
+        // Also support mouse for testing
+        stick.addEventListener('mousedown', (e) => this.onJoystickMouseStart(e));
+        document.addEventListener('mousemove', (e) => this.onJoystickMouseMove(e));
+        document.addEventListener('mouseup', (e) => this.onJoystickMouseEnd(e));
+    }
+    
+    onJoystickStart(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const touch = e.touches[0];
+        const stick = document.getElementById('joystickStick');
+        const rect = stick.getBoundingClientRect();
+        
+        this.joystickState.active = true;
+        this.joystickState.startX = rect.left + rect.width / 2;
+        this.joystickState.startY = rect.top + rect.height / 2;
+        this.joystickState.touchId = touch.identifier;
+        
+        stick.classList.add('active');
+        this.startJoystickNavigation();
+    }
+    
+    onJoystickMove(e) {
+        if (!this.joystickState.active) return;
+        
+        // Find the correct touch
+        let touch = null;
+        for (let i = 0; i < e.touches.length; i++) {
+            if (e.touches[i].identifier === this.joystickState.touchId) {
+                touch = e.touches[i];
+                break;
+            }
+        }
+        
+        if (!touch) return;
+        e.preventDefault();
+        
+        this.updateJoystickPosition(touch.clientX, touch.clientY);
+    }
+    
+    onJoystickEnd(e) {
+        if (!this.joystickState.active) return;
+        
+        // Check if our touch ended
+        let touchEnded = true;
+        for (let i = 0; i < e.touches.length; i++) {
+            if (e.touches[i].identifier === this.joystickState.touchId) {
+                touchEnded = false;
+                break;
+            }
+        }
+        
+        if (touchEnded) {
+            this.resetJoystick();
+        }
+    }
+    
+    onJoystickMouseStart(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const stick = document.getElementById('joystickStick');
+        const rect = stick.getBoundingClientRect();
+        
+        this.joystickState.active = true;
+        this.joystickState.startX = rect.left + rect.width / 2;
+        this.joystickState.startY = rect.top + rect.height / 2;
+        this.joystickState.mouseDown = true;
+        
+        stick.classList.add('active');
+        this.startJoystickNavigation();
+    }
+    
+    onJoystickMouseMove(e) {
+        if (!this.joystickState.active || !this.joystickState.mouseDown) return;
+        this.updateJoystickPosition(e.clientX, e.clientY);
+    }
+    
+    onJoystickMouseEnd(e) {
+        if (this.joystickState.mouseDown) {
+            this.joystickState.mouseDown = false;
+            this.resetJoystick();
+        }
+    }
+    
+    updateJoystickPosition(clientX, clientY) {
+        const stick = document.getElementById('joystickStick');
+        const maxDist = this.joystickState.maxDistance;
+        
+        let dx = clientX - this.joystickState.startX;
+        let dy = clientY - this.joystickState.startY;
+        
+        // Calculate distance and clamp
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance > maxDist) {
+            dx = (dx / distance) * maxDist;
+            dy = (dy / distance) * maxDist;
+        }
+        
+        // Update stick position
+        stick.style.transform = `translate(${dx}px, ${dy}px)`;
+        
+        // Store normalized direction (-1 to 1)
+        this.joystickState.currentX = dx / maxDist;
+        this.joystickState.currentY = dy / maxDist;
+    }
+    
+    resetJoystick() {
+        const stick = document.getElementById('joystickStick');
+        
+        this.joystickState.active = false;
+        this.joystickState.currentX = 0;
+        this.joystickState.currentY = 0;
+        
+        stick.style.transform = 'translate(0, 0)';
+        stick.classList.remove('active');
+        
+        this.stopJoystickNavigation();
+    }
+    
+    startJoystickNavigation() {
+        if (this.joystickNavigating) return;
+        this.joystickNavigating = true;
+        this.joystickNavigationLoop();
+    }
+    
+    stopJoystickNavigation() {
+        this.joystickNavigating = false;
+        this.saveViewportPosition();
+    }
+    
+    joystickNavigationLoop() {
+        if (!this.joystickNavigating) return;
+        
+        const speed = 12; // Base speed
+        const dx = this.joystickState.currentX;
+        const dy = this.joystickState.currentY;
+        
+        if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) {
+            this.viewport_x += dx * speed;
+            this.viewport_y += dy * speed;
+            
+            this.clampViewport();
+            this.updateViewport();
+            this.updateMinimap();
+        }
+        
+        requestAnimationFrame(() => this.joystickNavigationLoop());
+    }
+    
+    // ========================================
+    // Mobile Floating Action Buttons
+    // ========================================
+    
+    initMobileFABs() {
+        const fabContainer = document.getElementById('mobileFabContainer');
+        const fabMain = document.getElementById('mobileFabMain');
+        const fabText = document.getElementById('mobileFabText');
+        const fabImage = document.getElementById('mobileFabImage');
+        const fabCenter = document.getElementById('mobileFabCenter');
+        
+        if (!fabContainer || !fabMain) return;
+        
+        // Toggle FAB menu
+        fabMain.addEventListener('click', (e) => {
+            e.stopPropagation();
+            fabContainer.classList.toggle('open');
+        });
+        
+        // Close FAB menu when clicking elsewhere
+        document.addEventListener('click', (e) => {
+            if (!fabContainer.contains(e.target)) {
+                fabContainer.classList.remove('open');
+            }
+        });
+        
+        // Text action
+        if (fabText) {
+            fabText.addEventListener('click', (e) => {
+                e.stopPropagation();
+                fabContainer.classList.remove('open');
+                this.openTextEditorAtCenter();
+            });
+        }
+        
+        // Image action
+        if (fabImage) {
+            fabImage.addEventListener('click', (e) => {
+                e.stopPropagation();
+                fabContainer.classList.remove('open');
+                this.triggerImageUpload();
+            });
+        }
+        
+        // Center/Reset action
+        if (fabCenter) {
+            fabCenter.addEventListener('click', (e) => {
+                e.stopPropagation();
+                fabContainer.classList.remove('open');
+                this.resetView();
+            });
+        }
     }
     
     // ========================================
