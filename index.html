@@ -53,6 +53,7 @@
         <span><kbd>WASD</kbd> Navigation</span>
         <span><kbd>T</kbd> Text</span>
         <span><kbd>B</kbd> Bild</span>
+        <span><kbd>P</kbd> Pfeil</span>
         <span><kbd>Space</kbd> + Ziehen = Bewegen</span>
         <span><kbd>Scroll</kbd> = Zoom</span>
         <button class="close-hint" id="closeHint">×</button>
@@ -100,6 +101,9 @@
                     </button>
                     <button class="mobile-fab mobile-fab-action" id="mobileFabImage" title="Bild einfügen">
                         <span>🖼</span>
+                    </button>
+                    <button class="mobile-fab mobile-fab-action" id="mobileFabArrow" title="Pfeil zeichnen">
+                        <span>↗</span>
                     </button>
                     <button class="mobile-fab mobile-fab-action" id="mobileFabCenter" title="Zentrieren">
                         <span>⟲</span>
@@ -150,6 +154,10 @@
         <button class="context-btn" data-action="paste">
             <span class="context-icon">📋</span>
             <span>Aus Zwischenablage</span>
+        </button>
+        <button class="context-btn" data-action="arrow" id="arrowModeBtn">
+            <span class="context-icon">↗</span>
+            <span>Pfeil zeichnen</span>
         </button>
     </div>
 

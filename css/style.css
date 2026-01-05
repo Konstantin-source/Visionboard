@@ -410,6 +410,53 @@ body {
     transform-origin: 0 0;
 }
 
+/* Arrow Layer SVG */
+.arrow-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.arrow-layer line,
+.arrow-layer path {
+    pointer-events: stroke;
+}
+
+.arrow-line {
+    transition: stroke 0.2s ease;
+}
+
+.arrow-line:hover {
+    stroke: #ff6b35 !important;
+    stroke-width: 3;
+}
+
+.temp-arrow {
+    animation: dash 0.5s linear infinite;
+}
+
+@keyframes dash {
+    to {
+        stroke-dashoffset: -10;
+    }
+}
+
+/* Arrow Mode Cursor */
+.canvas-viewport.arrow-mode {
+    cursor: crosshair;
+}
+
+.canvas-viewport.arrow-mode .canvas-item {
+    cursor: pointer;
+}
+
+.canvas-viewport.arrow-mode .canvas-item:hover {
+    outline: 2px dashed var(--accent-cyan) !important;
+    outline-offset: 4px;
+}
+
 /* Center marker */
 .canvas::before {
     content: '+';
@@ -639,6 +686,11 @@ body {
 
 .context-btn:hover {
     background: rgba(0, 245, 255, 0.1);
+}
+
+.context-btn.active {
+    background: rgba(0, 245, 255, 0.2);
+    color: var(--accent-cyan);
 }
 
 .context-icon {
@@ -1354,6 +1406,10 @@ input[type="range"]::-webkit-slider-thumb {
     transition-delay: 0.15s;
 }
 
+.mobile-fab-container.open .mobile-fab-action:nth-child(4) {
+    transition-delay: 0.2s;
+}
+
 .mobile-fab-action:hover {
     background: rgba(0, 245, 255, 0.1);
     border-color: var(--accent-cyan);
@@ -1374,11 +1430,19 @@ input[type="range"]::-webkit-slider-thumb {
         display: block;
     }
     
+    /* Zoom controls unten links neben Joystick */
     .zoom-controls {
-        bottom: auto;
-        top: calc(var(--header-height) + 12px);
-        left: 50%;
-        transform: translateX(-50%);
+        bottom: 30px;
+        left: 160px;
+        top: auto;
+        transform: none;
+        flex-direction: column;
+        padding: 8px 6px;
+    }
+    
+    .zoom-controls .zoom-level {
+        order: -1;
+        margin-bottom: 4px;
     }
     
     .minimap {
@@ -1421,12 +1485,76 @@ input[type="range"]::-webkit-slider-thumb {
 /* Hide joystick on larger desktop screens with mouse */
 @media (min-width: 1025px) and (pointer: fine) {
     .mobile-joystick {
-        display: none !important;
+        display: none;
     }
     
     .mobile-fab-container {
-        display: none !important;
+        display: none;
     }
+}
+
+/* JavaScript-basierte Device-Erkennung Overrides */
+body.mobile-device .mobile-joystick,
+body.mobile-device .mobile-fab-container {
+    display: block !important;
+}
+
+body.desktop-device .mobile-joystick,
+body.desktop-device .mobile-fab-container {
+    display: none !important;
+}
+
+/* Desktop-Modus: Zoom-Controls unten links */
+body.desktop-device .zoom-controls {
+    bottom: 16px;
+    left: 16px;
+    top: auto;
+    transform: none;
+    flex-direction: row;
+}
+
+/* Mobile-Modus: Zoom-Controls neben Joystick */
+body.mobile-device .zoom-controls {
+    bottom: 30px;
+    left: 160px;
+    top: auto;
+    transform: none;
+    flex-direction: column;
+    padding: 8px 6px;
+}
+
+body.mobile-device .zoom-controls .zoom-level {
+    order: -1;
+    margin-bottom: 4px;
+}
+
+/* Force show mobile controls for testing - add ?mobile to URL */
+body.force-mobile-controls .mobile-joystick,
+body.force-mobile-controls .mobile-fab-container {
+    display: block !important;
+}
+
+body.force-mobile-controls .zoom-controls {
+    bottom: 30px;
+    left: 160px;
+    top: auto;
+    transform: none;
+    flex-direction: column;
+    padding: 8px 6px;
+}
+
+/* Force desktop controls for testing - add ?desktop to URL */
+body.force-desktop-controls .mobile-joystick,
+body.force-desktop-controls .mobile-fab-container {
+    display: none !important;
+}
+
+body.force-desktop-controls .zoom-controls {
+    bottom: 16px;
+    left: 16px;
+    top: auto;
+    transform: none;
+    flex-direction: row;
 }
 
 /* ========================================
@@ -1540,12 +1668,17 @@ input[type="range"]::-webkit-slider-thumb {
         right: calc(30px + env(safe-area-inset-right));
     }
     
-    .zoom-controls {
-        left: calc(12px + env(safe-area-inset-left));
-    }
-    
     .notification {
         bottom: calc(24px + env(safe-area-inset-bottom));
+    }
+}
+
+@media (max-width: 768px), (pointer: coarse) {
+    @supports (padding: env(safe-area-inset-bottom)) {
+        .zoom-controls {
+            bottom: calc(30px + env(safe-area-inset-bottom));
+            left: calc(160px + env(safe-area-inset-left));
+        }
     }
 }
 

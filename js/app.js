@@ -86,6 +86,7 @@ class VisionboardApp {
         this.boardId = 'default';
         this.items = [];
         this.todos = [];
+        this.arrows = []; // Pfeile/Verbindungen zwischen Items
         
         // Canvas state (5000x5000 canvas)
         this.canvasSize = 5000;
@@ -106,6 +107,13 @@ class VisionboardApp {
         this.resizeStart = { x: 0, y: 0, width: 0, height: 0 };
         this.editingItemId = null;
         
+        // Arrow drawing state
+        this.isDrawingArrow = false;
+        this.arrowMode = false;
+        this.arrowStart = null;
+        this.arrowStartItem = null;
+        this.tempArrow = null;
+        
         // Context menu state
         this.contextMenuPosition = { x: 0, y: 0 };
         
@@ -125,6 +133,19 @@ class VisionboardApp {
             glow: false
         };
         
+        // Joystick state (initialized early to prevent errors)
+        this.joystickState = {
+            active: false,
+            startX: 0,
+            startY: 0,
+            currentX: 0,
+            currentY: 0,
+            maxDistance: 35,
+            touchId: null,
+            mouseDown: false
+        };
+        this.joystickNavigating = false;
+        
         // Todo editor state
         this.todoEditorState = {
             priority: 'medium'
@@ -138,7 +159,68 @@ class VisionboardApp {
         this.pendingSync = false;
         this.syncTimeout = null;
         
+        // Device detection and mobile mode
+        this.isMobile = this.detectMobileDevice();
+        this.applyDeviceMode();
+        
+        // Check for mobile debug mode
+        this.checkMobileDebugMode();
+        
         this.init();
+    }
+    
+    detectMobileDevice() {
+        // Automatische Erkennung basierend auf mehreren Faktoren
+        const hasTouchScreen = 'ontouchstart' in window || 
+                              navigator.maxTouchPoints > 0 ||
+                              window.matchMedia('(pointer: coarse)').matches;
+        
+        const isSmallScreen = window.innerWidth <= 1024;
+        
+        const isMobileUserAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        // Kombinierte Erkennung: Touch + klein ODER Mobile User Agent
+        const isMobile = (hasTouchScreen && isSmallScreen) || isMobileUserAgent;
+        
+        console.log('Device detection:', { hasTouchScreen, isSmallScreen, isMobileUserAgent, isMobile });
+        
+        return isMobile;
+    }
+    
+    applyDeviceMode() {
+        if (this.isMobile) {
+            document.body.classList.add('mobile-device');
+            document.body.classList.remove('desktop-device');
+        } else {
+            document.body.classList.add('desktop-device');
+            document.body.classList.remove('mobile-device');
+        }
+        
+        // Listen for orientation/resize changes
+        window.addEventListener('resize', () => {
+            const wasMobile = this.isMobile;
+            this.isMobile = this.detectMobileDevice();
+            if (wasMobile !== this.isMobile) {
+                this.applyDeviceMode();
+            }
+        });
+    }
+    
+    checkMobileDebugMode() {
+        // Add ?mobile to URL to force show mobile controls on desktop
+        if (window.location.search.includes('mobile')) {
+            document.body.classList.add('force-mobile-controls');
+            this.isMobile = true;
+            console.log('Mobile controls debug mode enabled');
+        }
+        // Add ?desktop to URL to force desktop mode on mobile
+        if (window.location.search.includes('desktop')) {
+            document.body.classList.add('force-desktop-controls');
+            document.body.classList.remove('mobile-device');
+            document.body.classList.add('desktop-device');
+            this.isMobile = false;
+            console.log('Desktop controls debug mode enabled');
+        }
     }
     
     detectApiBase() {
@@ -152,12 +234,51 @@ class VisionboardApp {
     
     async init() {
         await this.loadFromServer();
+        this.initArrowLayer();
         this.bindEvents();
         this.render();
         this.renderTodos();
+        this.renderArrows();
         this.updateViewport();
         this.updateMinimap();
         this.updateZoomDisplay();
+    }
+    
+    // ========================================
+    // Arrow Layer Initialization
+    // ========================================
+    
+    initArrowLayer() {
+        // Create SVG layer for arrows if it doesn't exist
+        let svg = document.getElementById('arrowLayer');
+        if (!svg) {
+            svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.id = 'arrowLayer';
+            svg.classList.add('arrow-layer');
+            svg.setAttribute('width', this.canvasSize);
+            svg.setAttribute('height', this.canvasSize);
+            
+            // Define arrow marker
+            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+            marker.setAttribute('id', 'arrowhead');
+            marker.setAttribute('markerWidth', '10');
+            marker.setAttribute('markerHeight', '7');
+            marker.setAttribute('refX', '9');
+            marker.setAttribute('refY', '3.5');
+            marker.setAttribute('orient', 'auto');
+            
+            const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+            polygon.setAttribute('points', '0 0, 10 3.5, 0 7');
+            polygon.setAttribute('fill', '#00f5ff');
+            
+            marker.appendChild(polygon);
+            defs.appendChild(marker);
+            svg.appendChild(defs);
+            
+            this.canvas.insertBefore(svg, this.canvas.firstChild);
+        }
+        this.arrowLayer = svg;
     }
     
     // ========================================
@@ -300,24 +421,24 @@ class VisionboardApp {
     initMobileJoystick() {
         const joystick = document.getElementById('mobileJoystick');
         const stick = document.getElementById('joystickStick');
+        const base = document.querySelector('.joystick-base');
         
-        if (!joystick || !stick) return;
+        if (!joystick || !stick) {
+            console.log('Mobile joystick elements not found');
+            return;
+        }
         
-        this.joystickState = {
-            active: false,
-            startX: 0,
-            startY: 0,
-            currentX: 0,
-            currentY: 0,
-            maxDistance: 35 // Maximum distance the stick can move from center
-        };
+        console.log('Initializing mobile joystick');
         
-        // Touch events for joystick
+        // Touch events for joystick - on the base for better touch area
+        base.addEventListener('touchstart', (e) => this.onJoystickStart(e), { passive: false });
         stick.addEventListener('touchstart', (e) => this.onJoystickStart(e), { passive: false });
         document.addEventListener('touchmove', (e) => this.onJoystickMove(e), { passive: false });
         document.addEventListener('touchend', (e) => this.onJoystickEnd(e));
+        document.addEventListener('touchcancel', (e) => this.onJoystickEnd(e));
         
-        // Also support mouse for testing
+        // Also support mouse for testing on desktop
+        base.addEventListener('mousedown', (e) => this.onJoystickMouseStart(e));
         stick.addEventListener('mousedown', (e) => this.onJoystickMouseStart(e));
         document.addEventListener('mousemove', (e) => this.onJoystickMouseMove(e));
         document.addEventListener('mouseup', (e) => this.onJoystickMouseEnd(e));
@@ -329,12 +450,16 @@ class VisionboardApp {
         
         const touch = e.touches[0];
         const stick = document.getElementById('joystickStick');
-        const rect = stick.getBoundingClientRect();
+        const base = document.querySelector('.joystick-base');
+        const baseRect = base.getBoundingClientRect();
         
+        // Use center of base as reference point
         this.joystickState.active = true;
-        this.joystickState.startX = rect.left + rect.width / 2;
-        this.joystickState.startY = rect.top + rect.height / 2;
+        this.joystickState.startX = baseRect.left + baseRect.width / 2;
+        this.joystickState.startY = baseRect.top + baseRect.height / 2;
         this.joystickState.touchId = touch.identifier;
+        
+        console.log('Joystick touch started', this.joystickState.startX, this.joystickState.startY);
         
         stick.classList.add('active');
         this.startJoystickNavigation();
@@ -380,12 +505,16 @@ class VisionboardApp {
         e.stopPropagation();
         
         const stick = document.getElementById('joystickStick');
-        const rect = stick.getBoundingClientRect();
+        const base = document.querySelector('.joystick-base');
+        const baseRect = base.getBoundingClientRect();
         
+        // Use center of base as reference point
         this.joystickState.active = true;
-        this.joystickState.startX = rect.left + rect.width / 2;
-        this.joystickState.startY = rect.top + rect.height / 2;
+        this.joystickState.startX = baseRect.left + baseRect.width / 2;
+        this.joystickState.startY = baseRect.top + baseRect.height / 2;
         this.joystickState.mouseDown = true;
+        
+        console.log('Joystick mouse started', this.joystickState.startX, this.joystickState.startY);
         
         stick.classList.add('active');
         this.startJoystickNavigation();
@@ -512,6 +641,16 @@ class VisionboardApp {
             });
         }
         
+        // Arrow action
+        const fabArrow = document.getElementById('mobileFabArrow');
+        if (fabArrow) {
+            fabArrow.addEventListener('click', (e) => {
+                e.stopPropagation();
+                fabContainer.classList.remove('open');
+                this.toggleArrowMode();
+            });
+        }
+        
         // Center/Reset action
         if (fabCenter) {
             fabCenter.addEventListener('click', (e) => {
@@ -557,6 +696,8 @@ class VisionboardApp {
             this.doDragItem(e.clientX, e.clientY);
         } else if (this.resizingItem) {
             this.doResize(e.clientX, e.clientY);
+        } else if (this.isDrawingArrow) {
+            this.updateTempArrow(e.clientX, e.clientY);
         }
     }
     
@@ -829,6 +970,13 @@ class VisionboardApp {
             return;
         }
         
+        // P for arrow/pointer mode (Pfeil)
+        if (key === 'p' && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            this.toggleArrowMode();
+            return;
+        }
+        
         // Delete selected item
         if ((e.key === 'Delete' || e.key === 'Backspace') && this.selectedItem) {
             e.preventDefault();
@@ -841,6 +989,14 @@ class VisionboardApp {
             this.hideContextMenu();
             this.closeTextEditor();
             this.closeTodoEditor();
+            // Exit arrow mode
+            if (this.arrowMode) {
+                this.arrowMode = false;
+                this.viewport.classList.remove('arrow-mode');
+                const arrowBtn = document.getElementById('arrowModeBtn');
+                if (arrowBtn) arrowBtn.classList.remove('active');
+            }
+            this.cancelArrowDrawing();
         }
     }
     
@@ -974,7 +1130,206 @@ class VisionboardApp {
             case 'paste':
                 this.pasteFromClipboard(this.contextMenuPosition.x, this.contextMenuPosition.y);
                 break;
+            case 'arrow':
+                this.toggleArrowMode();
+                break;
         }
+    }
+    
+    // ========================================
+    // Arrow/Connection Mode
+    // ========================================
+    
+    toggleArrowMode() {
+        this.arrowMode = !this.arrowMode;
+        const arrowBtn = document.getElementById('arrowModeBtn');
+        
+        if (this.arrowMode) {
+            this.viewport.classList.add('arrow-mode');
+            if (arrowBtn) arrowBtn.classList.add('active');
+            this.showNotification('Pfeil-Modus: Klicke auf ein Element um einen Pfeil zu starten');
+        } else {
+            this.viewport.classList.remove('arrow-mode');
+            if (arrowBtn) arrowBtn.classList.remove('active');
+            this.cancelArrowDrawing();
+        }
+    }
+    
+    startArrowFromItem(item, e) {
+        if (!this.arrowMode) return;
+        
+        e.stopPropagation();
+        this.isDrawingArrow = true;
+        this.arrowStartItem = item;
+        
+        // Get center of the item
+        const itemEl = document.querySelector(`[data-id="${item.id}"]`);
+        if (itemEl) {
+            const rect = itemEl.getBoundingClientRect();
+            const canvasRect = this.canvas.getBoundingClientRect();
+            this.arrowStart = {
+                x: (rect.left + rect.width / 2 - canvasRect.left) / this.zoom,
+                y: (rect.top + rect.height / 2 - canvasRect.top) / this.zoom
+            };
+        } else {
+            this.arrowStart = { x: item.x + 50, y: item.y + 25 };
+        }
+        
+        // Create temp arrow line
+        this.createTempArrow();
+        this.showNotification('Klicke auf ein anderes Element um den Pfeil zu verbinden');
+    }
+    
+    createTempArrow() {
+        if (this.tempArrow) this.tempArrow.remove();
+        
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('class', 'temp-arrow');
+        line.setAttribute('x1', this.arrowStart.x);
+        line.setAttribute('y1', this.arrowStart.y);
+        line.setAttribute('x2', this.arrowStart.x);
+        line.setAttribute('y2', this.arrowStart.y);
+        line.setAttribute('stroke', '#00f5ff');
+        line.setAttribute('stroke-width', '2');
+        line.setAttribute('stroke-dasharray', '5,5');
+        line.setAttribute('marker-end', 'url(#arrowhead)');
+        
+        this.arrowLayer.appendChild(line);
+        this.tempArrow = line;
+    }
+    
+    updateTempArrow(clientX, clientY) {
+        if (!this.tempArrow || !this.isDrawingArrow) return;
+        
+        const canvasRect = this.canvas.getBoundingClientRect();
+        const x = (clientX - canvasRect.left) / this.zoom;
+        const y = (clientY - canvasRect.top) / this.zoom;
+        
+        this.tempArrow.setAttribute('x2', x);
+        this.tempArrow.setAttribute('y2', y);
+    }
+    
+    endArrowAtItem(item, e) {
+        if (!this.isDrawingArrow || !this.arrowStartItem) return;
+        if (item.id === this.arrowStartItem.id) {
+            this.showNotification('Pfeil muss auf ein anderes Element zeigen');
+            return;
+        }
+        
+        e.stopPropagation();
+        
+        // Create permanent arrow
+        const arrow = {
+            id: this.generateId(),
+            fromItemId: this.arrowStartItem.id,
+            toItemId: item.id,
+            color: '#00f5ff',
+            created_at: Date.now()
+        };
+        
+        this.arrows.push(arrow);
+        this.createArrowAPI(arrow);
+        this.renderArrows();
+        
+        this.cancelArrowDrawing();
+        this.showNotification('Pfeil erstellt!');
+    }
+    
+    cancelArrowDrawing() {
+        this.isDrawingArrow = false;
+        this.arrowStartItem = null;
+        this.arrowStart = null;
+        
+        if (this.tempArrow) {
+            this.tempArrow.remove();
+            this.tempArrow = null;
+        }
+    }
+    
+    renderArrows() {
+        if (!this.arrowLayer) return;
+        
+        // Remove existing arrow lines (but not defs)
+        const existingLines = this.arrowLayer.querySelectorAll('line:not(.temp-arrow), path');
+        existingLines.forEach(l => l.remove());
+        
+        for (const arrow of this.arrows) {
+            const fromItem = this.items.find(i => i.id === arrow.fromItemId);
+            const toItem = this.items.find(i => i.id === arrow.toItemId);
+            
+            if (!fromItem || !toItem) continue;
+            
+            const fromCenter = this.getItemCenter(fromItem);
+            const toCenter = this.getItemCenter(toItem);
+            
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('class', 'arrow-line');
+            line.setAttribute('data-id', arrow.id);
+            line.setAttribute('x1', fromCenter.x);
+            line.setAttribute('y1', fromCenter.y);
+            line.setAttribute('x2', toCenter.x);
+            line.setAttribute('y2', toCenter.y);
+            line.setAttribute('stroke', arrow.color || '#00f5ff');
+            line.setAttribute('stroke-width', '2');
+            line.setAttribute('marker-end', 'url(#arrowhead)');
+            
+            // Click to delete arrow
+            line.style.cursor = 'pointer';
+            line.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.deleteArrow(arrow.id);
+            });
+            
+            this.arrowLayer.appendChild(line);
+        }
+    }
+    
+    getItemCenter(item) {
+        let width = 100;
+        let height = 50;
+        
+        if (item.type === 'image') {
+            width = item.width || 200;
+            height = item.height || 150;
+        } else if (item.type === 'text') {
+            // Approximate text size
+            const el = document.querySelector(`[data-id="${item.id}"]`);
+            if (el) {
+                width = el.offsetWidth;
+                height = el.offsetHeight;
+            }
+        }
+        
+        return {
+            x: item.x + width / 2,
+            y: item.y + height / 2
+        };
+    }
+    
+    deleteArrow(id) {
+        const index = this.arrows.findIndex(a => a.id === id);
+        if (index !== -1) {
+            this.arrows.splice(index, 1);
+            this.deleteArrowAPI(id);
+            this.renderArrows();
+            this.showNotification('Pfeil gelöscht');
+        }
+    }
+    
+    // Arrow API methods (placeholder - sync with backend)
+    async createArrowAPI(arrow) {
+        // Save to backend when implemented
+        this.scheduleSyncArrows();
+    }
+    
+    async deleteArrowAPI(id) {
+        // Delete from backend when implemented
+        this.scheduleSyncArrows();
+    }
+    
+    scheduleSyncArrows() {
+        // Sync arrows as part of regular sync
+        this.scheduleSyncViewport();
     }
     
     // ========================================
@@ -1300,6 +1655,9 @@ class VisionboardApp {
             const el = this.createItemElement(item);
             this.canvas.appendChild(el);
         }
+        
+        // Re-render arrows when items move
+        this.renderArrows();
     }
     
     createItemElement(item) {
@@ -1352,17 +1710,29 @@ class VisionboardApp {
         });
         el.appendChild(deleteBtn);
         
-        // Drag handling
-        el.addEventListener('mousedown', (e) => {
-            if (e.target.classList.contains('resize-handle') || e.target.classList.contains('delete-btn')) return;
-            this.startDragItem(e, item);
-        });
-        
-        // Click to select
+        // Arrow mode click handlers
         el.addEventListener('click', (e) => {
             e.stopPropagation();
-            this.selectItem(item.id);
-            this.hideContextMenu();
+            
+            if (this.arrowMode) {
+                if (!this.isDrawingArrow) {
+                    // Start arrow from this item
+                    this.startArrowFromItem(item, e);
+                } else {
+                    // End arrow at this item
+                    this.endArrowAtItem(item, e);
+                }
+            } else {
+                this.selectItem(item.id);
+                this.hideContextMenu();
+            }
+        });
+        
+        // Drag handling (only when not in arrow mode)
+        el.addEventListener('mousedown', (e) => {
+            if (this.arrowMode) return;
+            if (e.target.classList.contains('resize-handle') || e.target.classList.contains('delete-btn')) return;
+            this.startDragItem(e, item);
         });
         
         return el;

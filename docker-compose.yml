@@ -24,7 +24,10 @@ services:
     ports:
       - "3001:3001"
     volumes:
+      # Named Volume für Datenbank - bleibt bei Updates bestehen
       - visionboard-data:/data
+      # Optional: Bind Mount für einfacheren Zugriff auf Backups
+      # - ./data:/data  # Auskommentieren wenn du lokalen Zugriff brauchst
     environment:
       - PORT=3001
       - DATA_DIR=/data
@@ -33,17 +36,6 @@ services:
       - visionboard-net
     restart: unless-stopped
 
-  # Cloudflare Tunnel
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: cloudflared-visionboard
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
-    networks:
-      - visionboard-net
-    depends_on:
-      - frontend
-
 networks:
   visionboard-net:
     driver: bridge
@@ -51,3 +43,5 @@ networks:
 volumes:
   visionboard-data:
     driver: local
+    # Das Volume wird NICHT gelöscht bei docker-compose down
+    # Nur bei docker-compose down -v oder docker volume rm
